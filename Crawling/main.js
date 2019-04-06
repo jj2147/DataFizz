@@ -16,8 +16,8 @@ mainly going for the "Customers who bought this item also bought" links
 
 
 const cheerio = require("cheerio");
-const {ProxyCrawlAPI} = require('proxycrawl');
-const api = new ProxyCrawlAPI({token: 'HIfghI46G91CCuU5S12Log'});
+const { ProxyCrawlAPI } = require('proxycrawl');
+const api = new ProxyCrawlAPI({ token: 'HIfghI46G91CCuU5S12Log' });
 const fs = require("fs");
 
 var queue = [];
@@ -28,7 +28,7 @@ var scrapedURLs = [];
 function getLinks($) {
     $("a").has("img").each((i, e) => {
         // if <a> has href and href is relative
-        if($(e).attr("href") && $(e).attr("href").charAt(0) === "/")
+        if ($(e).attr("href") && $(e).attr("href").charAt(0) === "/")
             queue.push($(e).attr("href"))
     });
 }
@@ -57,30 +57,42 @@ function scrapeBook($) {
 }
 
 
+var crawl = () => {
+
+    // console.log(queue[0]);
+    console.log(queue[0]);
+
+    api.get('https://www.amazon.com' + queue[0]).then(response => {
+
+        const $ = cheerio.load(response.body);
+
+        // console.log($("#productDetailsTable:contains('ISBN')").length);
+
+        // if this is a book product page (if product details contains ISBN) and it hasn't already been scraped
+        if (!scrapedURLs.includes(queue[0]) && $("#productDetailsTable:contains('ISBN')").length) {
+            // scrapeBook($);
+            // getLinks($);
+            // scrapedURLs.push(queue[0]);
+            // console.log(dataArray);
+            console.log("boooooooooooooooooooooooooook");            
+            console.log($("title").text());
+
+
+        }
+
+        queue.shift();
+        if (queue.length > 50) crawl();
+    }).catch(e => console.log(e));
+};
+
 api.get('https://www.amazon.com/gp/browse.html?node=283155').then(response => {
 
     getLinks(cheerio.load(response.body));
 
-    // FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
-    // while(dataArray.length < 10) {
-        api.get('https://www.amazon.com' + queue[0]).then(response => {
+    console.log(queue.length);
 
-            const $ = cheerio.load(response.body);
-
-            //if this is a book product page (if product details contains ISBN) and it hasn't already been scraped
-            if(!scrapedURLs.includes(queue[0]) && $("#productDetailsTable:contains('ISBN')").length) {
-                scrapeBook($);
-                getLinks($);
-                scrapedURLs.push(queue[0]);
-            }
-
-            queue.shift();
-
-        });
-    // }
-
-    console.log(queue);
-    console.log(dataArray);
+    crawl();
+});
 
     // fs.writeFile("./data.json", JSON.stringify(data, null, 4), (err) => {
     //     if(err){
@@ -89,5 +101,4 @@ api.get('https://www.amazon.com/gp/browse.html?node=283155').then(response => {
     //     };
     //     console.log("File has been created");
     // });
-});
 
