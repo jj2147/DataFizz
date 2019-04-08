@@ -1,0 +1,4 @@
+
+For domains other than Amazon, virtually everything would need to be different. We would need to study the DOM and write new cheerio selectors. The crawling algorithm may or may not be the same depending on what we are looking for.
+
+For Amazon products other than books, it could get tricky to categorize them, since they don't have the consistent ISBN elements that books have. Most products do have a breadcrumbs header (e.g. Clothing, Shoes & Jewelry › Women › Handbags & Wallets › Top-Handle Bags) so we can check if we're on the right track. I would still use the method of crawling through the recommendations section, assuming we're looking for a single type of product.

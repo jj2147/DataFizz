@@ -1,52 +1,45 @@
 
-/*
-algorithm
-
-find the link for books section homepage. (how?)
-grab all relative links that have images, store in queue.
-iterate queue:
-    if link is book product page and hasn't already been scraped, scrape & save data, grab links on page & add to queue.
-    if not book product page, do nothing.
-continue until desired number of books
-
-
-only crawl links that have images on book product pages to maximize the chance of the link being another book product page.
-mainly going for the "Customers who bought this item also bought" links
-*/
+// This crawler checks if a page is a book product (listing) page. (physical books only)
+// If so, scrape data and get links on page, and recurse.
 
 
 const cheerio = require("cheerio");
-const { ProxyCrawlAPI } = require('proxycrawl');
-const api = new ProxyCrawlAPI({ token: 'HIfghI46G91CCuU5S12Log' });
+const {ProxyCrawlAPI} = require('proxycrawl');      //bypass Amazon's bot detection
+const api = new ProxyCrawlAPI({token: 'HIfghI46G91CCuU5S12Log'});
 const fs = require("fs");
+const phantomFunction = require("./phantom.js");
+
 
 var queue = [];
-var dataArray = [];
 var scrapedURLs = [];
+var dataArray = [];
 
 
+// gets all relative links that are associated with images. these links have a good chance to lead to books.
 function getLinks($) {
-    $("a").has("img").each((i, e) => {
-        // if <a> has href and href is relative
-        if ($(e).attr("href") && $(e).attr("href").charAt(0) === "/")
-            queue.push($(e).attr("href"))
+    $("a[href^='/']").has("img").each((i, e) => {
+        queue.push($(e).attr("href"));
     });
 }
 
-function scrapeBook($) {
 
+function scrapeBook($) {
     let data = {};
+
+    data.id = dataArray.length;
 
     data.name = $("#productTitle").text();
 
-    data.newPrice = $("#buyNewSection").find(".offer-price").text();
+    data.newPrice = Number($("#buyNewSection").find(".offer-price").text().replace(/[^0-9.-]+/g, ""));
 
-    // How do you get inside an iframe?
-    // data.description = $("#bookDesc_iframe").contents().text();
+    // how to get the full description inside the iframe? async problem?
+    // data.description = $("#bookDesc_iframe").contents().text();     ??
+
+    data.description = $("meta[name='description']").attr("content");
 
     data.dimensions = $("#productDetailsTable").find("b:contains('Dimensions')").parent().contents().not("b").text().trim();
 
-    data.imageURLs = [];
+    data.imageURLs = [];        // need page interaction to get full images (more phantom?)
     $(".imageThumb").each((i, e) => {
         data.imageURLs.push($(e).find("img").attr("src"))
     });
@@ -57,48 +50,54 @@ function scrapeBook($) {
 }
 
 
-var crawl = () => {
+function crawl() {
 
-    // console.log(queue[0]);
-    console.log(queue[0]);
+    let queue0 = queue[0];      //for faster results, set this to around queue[40]. book links are near the bottom of the starting page
+    console.log(queue0);
 
-    api.get('https://www.amazon.com' + queue[0]).then(response => {
+    if(scrapedURLs.includes(queue0)) {    //if already scraped, go next
+        queue.shift();
+        crawl();
+        return;
+    }
 
+    api.get('https://www.amazon.com' + queue0).then(response => {
         const $ = cheerio.load(response.body);
 
-        // console.log($("#productDetailsTable:contains('ISBN')").length);
+        // only crawl book product pages because they usually have links to other books 
+        // such as the "Customers who bought this item also bought" section
+        // this should prevent the crawler from crawling off to the abyss
+        if($("#productDetailsTable:contains('ISBN-')").length) {    // this is a book product page (the '-' excludes kindle books)
+            scrapeBook($);
+            getLinks($);
+            scrapedURLs.push(queue0);
+            console.log("FOUND BOOK!!! queue.length: ", queue.length);
 
-        // if this is a book product page (if product details contains ISBN) and it hasn't already been scraped
-        if (!scrapedURLs.includes(queue[0]) && $("#productDetailsTable:contains('ISBN')").length) {
-            // scrapeBook($);
-            // getLinks($);
-            // scrapedURLs.push(queue[0]);
-            // console.log(dataArray);
-            console.log("boooooooooooooooooooooooooook");            
-            console.log($("title").text());
-
-
+            if(scrapedURLs.length >= 10) {       //finished crawl
+                fs.writeFile("./data.json", JSON.stringify(dataArray, null, 4), (err) => {if(err) throw err});
+                return;
+            }
         }
 
         queue.shift();
-        if (queue.length > 50) crawl();
-    }).catch(e => console.log(e));
+        crawl();
+
+    }).catch(err => {
+        console.log("ERROR!!!!!!!", err)    //sometimes request times out
+        queue.shift();
+        crawl();
+    });
+
 };
 
-api.get('https://www.amazon.com/gp/browse.html?node=283155').then(response => {
 
+(async () => {
+    let mainBooksURL = await phantomFunction();
+    console.log("starting point:", mainBooksURL);
+    let response = await api.get(mainBooksURL);
     getLinks(cheerio.load(response.body));
-
-    console.log(queue.length);
-
     crawl();
-});
-
-    // fs.writeFile("./data.json", JSON.stringify(data, null, 4), (err) => {
-    //     if(err){
-    //         console.error(err);
-    //         return;
-    //     };
-    //     console.log("File has been created");
-    // });
+    // console.log(queue);
+    
+})();
 
